@@ -15,9 +15,10 @@
  * The frequencies output is a tab-separated 2-column file. Each line
  * contains the haplotype name and its estimated frequency.
  *
- * The individual output is a tab-separated 3-column file. Each line
- * contains the individual ID, its estimated haplotype-pair list (which may
- * be ambiguous), and a single haplotype pair, which is the same as
+ * The individual output is a tab-separated 4-column file. Each line
+ * contains the individual ID, its predicted haplotype-pair list (which may
+ * be ambiguous), the count of haplotype-pairs in the list, and finally a
+ * single haplotype pair, which is the same as
  * column 2 if the haplotype list is unambiguous or a randomly chosen
  * haplotype pair from column 2 if the haplotype list is ambiguous.
  *
@@ -62,11 +63,12 @@ err.println "done in ${round} rounds"
 // output the hap predictions per individual
 err.println "outputting ${idOutFile}..."
 idOut = new PrintWriter(new File(idOutFile).newOutputStream(), true)
-idOut.println "id\thaplotype list\thaplotype pair"
+idOut.println "id\thaplotype list\t# haplotype pairs\tfinal haplotype pair(rand)"
 hlList.eachWithIndex { hl, i ->
     id = idList[i]
     randHP = randomHapPair(hl)
-    idOut.println "${id}\t${hl}\t${randHP}"
+	s = hl.getChars().count("|")
+    idOut.println "${id}\t${hl}\t${s}\t${randHP}"
 } // each 
 
 // output the haplotype frequency estimations
@@ -74,7 +76,7 @@ err.println "done. outputting ${hapOutFile}..."
 hapOut = new PrintWriter(new File(hapOutFile).newOutputStream(), true)
 hapOut.println "haplotype\tfrequency"
 h.each { hap, freq ->
-    hapOut.println "${hap}\t${freq.round(4)}"
+    hapOut.println "${hap}\t${freq.round(8)}"
 }
 err.println "done"
 // end main
@@ -87,7 +89,7 @@ err.println "done"
  *                      3-column file. Each line represents an individual's 
  *                      haplotype list.
  *                      column 1: an individual ID
- *                      column 2: not used
+ *                      column 2: an optional second ID (e.g., for relationships)
  *                      column 3: a haplotype list (e.g., 1+1|2+3); 
  *                                all ambiguity is in the '|'
  * @return a List with two Lists; the first contains the IDs, the second contains
@@ -101,18 +103,30 @@ def ArrayList<ArrayList> loadHapPairLists(String inputFileName) {
     ArrayList<String> hlList = []
 
     c=0;
+	uninterpCount = 0
     in_csv.eachLine { row ->
         c++;
-        (id, alist, slist) = row.split()
+		rowArray = row.split()
+		(id, relationship) = [rowArray[0], rowArray[1]]
+ 	    slist = ""
+		if(rowArray.size() > 2) {
+		    slist = rowArray[2]
+		}	  
+		
         if(debugging) { 
             err.println "${id}"
         }
-
+		id = id + relationship
+		if((slist == null) || !slist.contains("+")) {
+			uninterpCount++
+			err.println "skipping id ${id} due to haplotype list '${slist}"
+			return
+		}
         idList.add(id)
         hlList.add(slist)
     } // each input line
-    err.println "done: ${idList.size()} IDs"
-
+	total = idList.size() + uninterpCount
+    err.println "done: ${idList.size()} IDs, ${uninterpCount} IDs skipped due to uninterpretable/incorrect haplotype lists; ${total} total"
     return [idList, hlList]
 } // loadHapPairLists
 
